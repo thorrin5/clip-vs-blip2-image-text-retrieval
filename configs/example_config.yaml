@@ -1,0 +1,38 @@
+project:
+  name: clip_vs_blip2_retrieval
+  thesis_title: "Comparative Analysis of CLIP vs BLIP-2 for Image-Text Retrieval"
+  author: "Tibor Horcsin"
+
+paths:
+  project_root: "."
+  flickr30k_images: "data/flickr30k/flickr30k_images"
+  flickr30k_karpathy_json: "data/flickr30k/flickr30k/dataset.json"
+  scicap_source_dir: "data/scicap_source"
+  scicap_processed_dir: "data/scicap_processed"
+  scicap_images_dir: "data/scicap/images"
+  raw_root: "outputs/raw"
+  tables_root: "outputs/tables"
+  figures_root: "outputs/figures"
+  logs_root: "outputs/logs"
+  scicap_raw_root: "outputs/scicap/raw_results"
+  scicap_tables_root: "outputs/scicap/tables"
+  scicap_checkpoint_root: "outputs/scicap/checkpoints"
+
+models:
+  clip:
+    implementation: "official_openai_clip"
+    model_name: "ViT-L/14"
+    precision: "fp16"
+  blip2:
+    implementation: "huggingface_transformers"
+    model_name: "Salesforce/blip2-itm-vit-g"
+    precision: "fp16"
+
+evaluation:
+  recall_k: [1, 5, 10]
+  batch_size_images: 16
+  batch_size_texts: 256
+  blip2_pair_batch_size: 32
+  blip2_rerank_top_k: 128
+  seed: 42
+

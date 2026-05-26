@@ -1,0 +1,126 @@
+# Bachelor thesis experiment configuration.
+#
+# The public repository uses relative paths so the code can be cloned without
+# exposing local workstation or HPC account details. Datasets and checkpoints
+# are intentionally excluded; place them under data/ and checkpoints/ or adapt
+# the paths below for your machine or cluster.
+
+project:
+  name: clip_vs_blip2_retrieval
+  thesis_title: "Comparative Analysis of CLIP vs BLIP-2 for Image-Text Retrieval"
+  author: "Tibor Horcsin"
+
+paths:
+  project_root: "."
+  data_root: "data"
+  flickr30k_root: "data/flickr30k"
+  flickr30k_images: "data/flickr30k/flickr30k_images"
+  flickr30k_karpathy_json: "data/flickr30k/flickr30k/dataset.json"
+  flickr30k_captions_csv: "data/flickr30k/captions.txt"
+  ai2d_root: "data/ai2d"
+  ai2d_images: "data/ai2d/images"
+  ai2d_dataset_json: "data/ai2d/dataset.json"
+  ai2d_split_json: "data/ai2d/dataset_split.json"
+  scicap_source_dir: "data/scicap_source"
+  scicap_processed_dir: "data/scicap_processed"
+  scicap_images_dir: "data/scicap/images"
+  scicap_results_root: "outputs/scicap"
+  scicap_raw_root: "outputs/scicap/raw_results"
+  scicap_tables_root: "outputs/scicap/tables"
+  scicap_figures_root: "outputs/scicap/figures"
+  scicap_logs_root: "outputs/scicap/logs"
+  scicap_checkpoint_root: "outputs/scicap/checkpoints"
+  results_root: "outputs"
+  raw_root: "outputs/raw"
+  figures_root: "outputs/figures"
+  tables_root: "outputs/tables"
+  logs_root: "outputs/logs"
+  checkpoint_root: "checkpoints/final"
+  cache_root: ".cache"
+
+models:
+  clip:
+    implementation: "official_openai_clip"
+    package: "git+https://github.com/openai/CLIP.git"
+    model_name: "ViT-L/14"
+    precision: "fp16"
+
+  blip2:
+    implementation: "huggingface_transformers"
+    package: "transformers"
+    model_class: "Blip2ForImageTextRetrieval"
+    processor_class: "AutoProcessor"
+    model_name: "Salesforce/blip2-itm-vit-g"
+    alternative_model_name: "Salesforce/blip2-itm-vit-g-coco"
+    precision: "fp16"
+
+evaluation:
+  recall_k: [1, 5, 10]
+  directions: ["image_to_text", "text_to_image"]
+  batch_size_images: 16
+  batch_size_texts: 256
+  blip2_pair_batch_size: 32
+  blip2_rerank_top_k: 128
+  blip2_exact_pair_limit: 25000
+  blip2_itm_pair_limit: 800000
+  seed: 42
+
+training:
+  clip:
+    protocol: "official_openai_clip_ai2d_finetuned_contrastive"
+    epochs: 5
+    batch_size: 32
+    lr: 1.0e-6
+    weight_decay: 0.1
+  blip2:
+    protocol: "huggingface_blip2_ai2d_finetuned_itc_itm_topk_rerank"
+    epochs: 3
+    batch_size: 8
+    lr: 2.0e-5
+    weight_decay: 0.05
+    itm_loss_weight: 0.2
+  clip_scicap:
+    protocol: "official_openai_clip_scicap_finetuned_contrastive"
+    epochs: 30
+    batch_size: 32
+    lr: 1.0e-6
+    weight_decay: 0.1
+    min_epochs: 8
+    early_stopping_patience: 6
+    early_stopping_min_delta: 0.01
+  blip2_scicap:
+    protocol: "huggingface_blip2_scicap_finetuned_itc_itm_topk_rerank"
+    epochs: 20
+    batch_size: 8
+    lr: 1.0e-5
+    weight_decay: 0.05
+    itm_loss_weight: 0.2
+    warmup_steps: 200
+    grad_accum_steps: 8
+    min_epochs: 8
+    early_stopping_patience: 5
+    early_stopping_min_delta: 0.01
+
+dependencies:
+  python: "3.10.19"
+  torch: "2.7.1+cu118"
+  torchvision: "0.22.1+cu118"
+  openai_clip: "git+https://github.com/openai/CLIP.git@d05afc436d78f1c48dc0dbf8e5980a9d471f35f6"
+  transformers: "4.45.2"
+  tokenizers: "0.20.3"
+
+hpc:
+  cluster: "PERUN"
+  scheduler: "SLURM"
+  partition: "GPU"
+  conda_env: "bakalarka"
+  conda_init: "${HOME}/miniconda3/bin/activate"
+  gpus: 1
+  cpus: 8
+  mem: "64G"
+
+archived_first_version:
+  path: "First_version_results"
+  note: "Previous OpenCLIP/LAVIS prototype results and checkpoints were moved out of the active results tree on 2026-04-28."
+  clip_implementation: "open_clip"
+  blip2_implementation: "lavis"

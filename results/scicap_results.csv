@@ -1,0 +1,5 @@
+model,dataset,variant,split,i2t_R1,i2t_R5,i2t_R10,t2i_R1,t2i_R5,t2i_R10,mean_R1,mean_R5,mean_R10,img_enc_s,img_per_sec,itm_rerank_s,total_s,train_samples,lr,effective_batch,epochs_completed,best_epoch,best_val_mean_R1,early_stopped
+CLIP,SciCap,zero-shot,test,21.60,33.10,39.30,21.70,34.80,41.20,21.65,33.95,40.25,13.1,76.5,-,13,-,-,-,-,-,-,-
+BLIP-2,SciCap,zero-shot,test,22.70,31.20,35.00,29.90,39.90,44.90,26.30,35.55,39.95,11.7,85.6,1977,1988,-,-,-,-,-,-,-
+CLIP,SciCap,fine-tuned,test,34.30,50.40,58.00,33.60,50.70,58.20,33.95,50.55,58.10,9.6,104.5,-,10,45000,1e-06,32,8,2,35.05,True
+BLIP-2,SciCap,fine-tuned,test,29.50,41.30,46.40,30.50,43.10,49.10,30.00,42.20,47.75,27.2,36.7,5167,5195,45000,1e-05,64,19,14,32.80,True

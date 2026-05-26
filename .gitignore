@@ -1,0 +1,69 @@
+# Local environments
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Secrets and local credentials
+.env
+.env.*
+*.pem
+*.key
+
+# Datasets and raw downloads
+datasets/
+data/raw/
+data/flickr30k/
+data/scicap/
+data/scicap_source/
+data/scicap_processed/
+data/ai2d/
+
+# Model weights, checkpoints, and caches
+checkpoints/
+models/
+*.pt
+*.pth
+*.bin
+*.safetensors
+.cache/
+cache/
+outputs/cache/
+
+# Generated experiment outputs
+outputs/
+results/raw/
+results/scicap/
+wandb/
+runs/
+logs/
+slurm-*.out
+slurm-*.err
+
+# Local exports
+bc_results/
+bc_results_export/
+bc_results.zip
+bc_results_export.zip
+*.log
+
+# Thesis build files and PDFs
+*.aux
+*.bbl
+*.blg
+*.glo
+*.lof
+*.lot
+*.out
+*.toc
+*.pdf
+!docs/**/*.pdf
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

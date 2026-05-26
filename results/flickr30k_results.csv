@@ -1,0 +1,3 @@
+model,dataset,variant,split,i2t_R1,i2t_R5,i2t_R10,t2i_R1,t2i_R5,t2i_R10,mean_R1,mean_R5,mean_R10,img_enc_s,img_per_sec,itm_rerank_s,total_s,train_samples,lr,effective_batch,epochs_completed,best_epoch,best_val_mean_R1,early_stopped
+CLIP,Flickr30K,zero-shot,karpathy_test,85.20,97.40,99.10,64.92,87.28,92.02,75.06,92.34,95.56,4.0,251.8,-,5,-,-,-,-,-,-,-
+BLIP-2,Flickr30K,zero-shot,karpathy_test,96.80,99.90,100.00,86.30,96.84,98.38,91.55,98.37,99.19,17.1,58.5,4230,4247,-,-,-,-,-,-,-
