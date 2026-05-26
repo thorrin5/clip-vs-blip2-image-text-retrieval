@@ -1,8 +1,9 @@
-"""Flickr30K Karpathy split loader.
+"""Načítanie Flickr30K Karpathy splitu.
 
-The thesis uses the standard Karpathy test split: 1,000 images with five
-captions each. The loader preserves that one-to-many mapping so Recall@K counts
-any of the five captions as correct for image-to-text retrieval.
+Finálna práca používa štandardný Karpathy test split: 1 000 obrázkov a päť
+caption textov pre každý obrázok. Loader zachováva toto mapovanie one-to-many,
+aby sa pri image-to-text vyhľadávaní počítal ako správny ktorýkoľvek z piatich
+referenčných captionov.
 """
 
 from __future__ import annotations
@@ -18,7 +19,13 @@ def load_flickr30k_karpathy(
     split: str = "test",
     max_images: int | None = None,
 ) -> RetrievalDataset:
-    """Load one Flickr30K Karpathy split as a RetrievalDataset."""
+    """
+    Načíta jeden Flickr30K Karpathy split ako `RetrievalDataset`.
+
+    Funkcia očakáva Karpathy JSON anotácie a adresár s obrázkami. Chýbajúce
+    obrázky sa preskočia, aby evaluácia nepadla na nekompletnom lokálnom
+    datasete.
+    """
     data = load_json(dataset_json_path)
     image_paths: list[str] = []
     captions: list[str] = []
@@ -34,6 +41,7 @@ def load_flickr30k_karpathy(
 
         image_idx = len(image_paths)
         image_paths.append(str(image_path))
+        # Flickr30K má pre jeden obrázok viacero správnych captionov.
         raw_captions = [sentence.get("raw", "").strip() for sentence in image.get("sentences", [])]
         raw_captions = [caption for caption in raw_captions if caption]
         image_to_captions[image_idx] = list(range(len(captions), len(captions) + len(raw_captions)))

@@ -1,32 +1,10 @@
 """
-Purpose:
-    Generate training-curve PNG plots from saved epoch history JSON files.
+Generovanie tréningových kriviek pre SciCap fine-tuning.
 
-Thesis context:
-    This plotting utility supports the fine-tuning analysis for CLIP and BLIP-2.
-    The SciCap curve is especially relevant to the final thesis comparison.
-
-Inputs:
-    - Selected training-history JSON files configured in the HISTORY mapping.
-
-Outputs:
-    - results/figures/training/ai2d_training_curves.png.
-    - results/figures/training/scicap_training_curves.png.
-
-Defense note:
-    These plots show how validation Mean R@1 and training loss evolved during
-    fine-tuning. They are useful for explaining early stopping and why a
-    specific checkpoint was selected.
-
-Additional implementation notes:
-
-This script reads saved per-epoch histories and plots validation Mean R@1 plus
-training loss. It is used for defense figures that explain early stopping and
-fine-tuning behaviour without rerunning any training jobs.
-
-Outputs (to results/figures/training/):
-  ai2d_training_curves.png   — CLIP vs BLIP-2 on AI2D
-  scicap_training_curves.png — CLIP vs BLIP-2 on SciCap
+Skript číta uložené per-epoch histórie modelov CLIP a BLIP-2 a vytvára graf
+validačnej metriky Mean R@1 spolu s tréningovou stratou. Graf slúži na
+vysvetlenie správania fine-tuningu a výberu najlepšieho checkpointu bez toho,
+aby bolo potrebné znovu spúšťať dlhé GPU tréningy.
 """
 
 from __future__ import annotations
@@ -36,6 +14,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
@@ -44,14 +23,10 @@ BASE = Path(__file__).resolve().parents[2]
 RESULTS = BASE / "results"
 OUT_DIR = BASE / "figures/plots"
 
-# These are the public thesis histories included in this repository.
+# Verejná verzia obsahuje iba SciCap histórie použité vo finálnom porovnaní.
 HISTORY = {
-    "ai2d": {
-        "CLIP":   RESULTS / "training_history/clip_ai2d_epochs.json",
-        "BLIP-2": RESULTS / "training_history/blip2_ai2d_epochs.json",
-    },
     "scicap": {
-        "CLIP":   RESULTS / "training_history/clip_scicap_45k_epochs.json",
+        "CLIP": RESULTS / "training_history/clip_scicap_45k_epochs.json",
         "BLIP-2": RESULTS / "training_history/blip2_scicap_45k_epochs.json",
     },
 }
@@ -61,17 +36,24 @@ MARKERS = {"CLIP": "o", "BLIP-2": "s"}
 
 
 def fmt_percent(value: float) -> str:
-    """Round percentages in the same way they are normally reported in tables."""
+    """Zaokrúhli percentá rovnakým spôsobom, ako sa uvádzajú v tabuľkách."""
     return str(Decimal(str(value)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
 
 def load(path: Path) -> list[dict]:
-    with open(path) as f:
-        return json.load(f)
+    """Načíta JSON históriu tréningu ako zoznam epochových záznamov."""
+    with path.open(encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def plot_dataset(dataset_key: str, title: str, out_path: Path) -> None:
-    """Plot validation Mean R@1 and training loss for one dataset."""
+    """
+    Vykreslí validačné Mean R@1 a tréningovú stratu pre jeden dataset.
+
+    Ľavý graf ukazuje kvalitu retrieval modelu na validačnej množine, pravý graf
+    ukazuje optimalizačný priebeh. Zvislá čiara označuje epochu najlepšieho
+    checkpointu podľa validačného Mean R@1.
+    """
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
     fig.suptitle(title, fontsize=14, fontweight="bold", y=1.01)
 
@@ -82,22 +64,26 @@ def plot_dataset(dataset_key: str, title: str, out_path: Path) -> None:
         else:
             print(f"  [MISSING] {path.name}")
 
-    # ── Left: val_mean_R1 ───────────────────────────────────────────────────
+    # Validačná metrika Mean R@1 je hlavný signál pre výber checkpointu.
     ax = axes[0]
     for model, data in histories.items():
-        epochs = [d["epoch"] for d in data]
-        vals   = [d["val_mean_R1"] for d in data]
-        best_e = next((d["epoch"] for d in data if d.get("is_best")), None)
-        # last is_best = True is the actual best
-        best_e = max((d["epoch"] for d in data if d.get("is_best")), default=None)
-        best_v = next((d["val_mean_R1"] for d in data if d["epoch"] == best_e), None)
+        epochs = [record["epoch"] for record in data]
+        values = [record["val_mean_R1"] for record in data]
+        best_epoch = max((record["epoch"] for record in data if record.get("is_best")), default=None)
+        best_value = next((record["val_mean_R1"] for record in data if record["epoch"] == best_epoch), None)
 
-        ax.plot(epochs, vals, color=COLORS[model], marker=MARKERS[model],
-                markersize=5, linewidth=2, label=model)
-        if best_e is not None:
-            ax.axvline(best_e, color=COLORS[model], linestyle="--", linewidth=1, alpha=0.5)
-            ax.scatter([best_e], [best_v], color=COLORS[model], s=80, zorder=5,
-                       marker="*", label=f"{model} best (ep {best_e}: {fmt_percent(best_v)}%)")
+        ax.plot(epochs, values, color=COLORS[model], marker=MARKERS[model], markersize=5, linewidth=2, label=model)
+        if best_epoch is not None:
+            ax.axvline(best_epoch, color=COLORS[model], linestyle="--", linewidth=1, alpha=0.5)
+            ax.scatter(
+                [best_epoch],
+                [best_value],
+                color=COLORS[model],
+                s=80,
+                zorder=5,
+                marker="*",
+                label=f"{model} best (ep {best_epoch}: {fmt_percent(best_value)}%)",
+            )
 
     ax.set_xlabel("Epoch", fontsize=11)
     ax.set_ylabel("Val Mean R@1 (%)", fontsize=11)
@@ -107,13 +93,12 @@ def plot_dataset(dataset_key: str, title: str, out_path: Path) -> None:
     ax.grid(True, alpha=0.3)
     ax.set_ylim(bottom=0)
 
-    # ── Right: train_loss ───────────────────────────────────────────────────
+    # Tréningová strata dopĺňa interpretáciu: ukazuje, či optimalizácia klesala.
     ax = axes[1]
     for model, data in histories.items():
-        epochs = [d["epoch"] for d in data]
-        losses = [d["train_loss"] for d in data]
-        ax.plot(epochs, losses, color=COLORS[model], marker=MARKERS[model],
-                markersize=5, linewidth=2, label=model)
+        epochs = [record["epoch"] for record in data]
+        losses = [record["train_loss"] for record in data]
+        ax.plot(epochs, losses, color=COLORS[model], marker=MARKERS[model], markersize=5, linewidth=2, label=model)
 
     ax.set_xlabel("Epoch", fontsize=11)
     ax.set_ylabel("Train Loss", fontsize=11)
@@ -131,11 +116,7 @@ def plot_dataset(dataset_key: str, title: str, out_path: Path) -> None:
 
 
 def main() -> None:
-    plot_dataset(
-        "ai2d",
-        "AI2D Fine-tuning - CLIP vs BLIP-2 (2,470 train pairs)",
-        OUT_DIR / "ai2d_training_curves.png",
-    )
+    """Vygeneruje finálny SciCap graf použitý v dokumentácii repozitára."""
     plot_dataset(
         "scicap",
         "SciCap Fine-tuning - CLIP vs BLIP-2 (45,000 train pairs)",

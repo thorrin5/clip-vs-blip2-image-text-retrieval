@@ -1,4 +1,4 @@
-"""Structural smoke tests for the canonical scaffold."""
+"""Štrukturálne smoke testy verejnej experimentálnej kostry."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from src.utils.paths import ensure_output_dirs
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Definuje argumenty pre rýchlu kontrolu repozitára."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_config.yaml")
     parser.add_argument("--check-model-imports", action="store_true")
@@ -23,6 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def check_model_imports() -> None:
+    """Overí dostupnosť veľkých modelových knižníc iba na explicitnú požiadavku."""
     import importlib
 
     for module_name in ["clip", "transformers"]:
@@ -37,13 +39,12 @@ def check_model_imports() -> None:
 
 
 def check_config_shape(config: dict) -> None:
+    """Skontroluje, či konfigurácia obsahuje minimálne potrebné sekcie."""
     required_path_keys = [
         "project_root",
         "data_root",
         "flickr30k_images",
         "flickr30k_karpathy_json",
-        "ai2d_images",
-        "ai2d_dataset_json",
         "raw_root",
         "tables_root",
         "figures_root",
@@ -59,6 +60,7 @@ def check_config_shape(config: dict) -> None:
 
 
 def check_slurm_script(path: Path) -> None:
+    """Overí, či SLURM skript obsahuje základné diagnostické a konfiguračné prvky."""
     text = path.read_text(encoding="utf-8")
     required_snippets = [
         "#SBATCH --output=",
@@ -74,6 +76,7 @@ def check_slurm_script(path: Path) -> None:
 
 
 def run_full_model_smoke(config_path: str) -> None:
+    """Spustí miniatúrne modelové behy, ktoré vyžadujú pripravené dáta a váhy."""
     commands = [
         [
             sys.executable,
@@ -99,7 +102,7 @@ def run_full_model_smoke(config_path: str) -> None:
             "--model",
             "blip2",
             "--dataset",
-            "ai2d",
+            "scicap",
             "--split",
             "test",
             "--max-images",
@@ -113,6 +116,7 @@ def run_full_model_smoke(config_path: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Vykoná lokálne kontroly bez sťahovania modelov a bez plnej evaluácie."""
     args = build_parser().parse_args(argv)
     config = load_config(args.config)
     check_config_shape(config)
@@ -132,15 +136,13 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print("flickr30k loader: skipped (dataset files are not included in this repository)")
 
-    ai2d_ready = resolve_path(config, "ai2d_images").exists() and (
-        resolve_path(config, "ai2d_split_json").exists() or resolve_path(config, "ai2d_dataset_json").exists()
-    )
-    if ai2d_ready:
-        ai2d = load_dataset_from_config(config, "ai2d", "test", max_images=5)
-        assert ai2d.num_images == 5, f"Expected 5 AI2D images, got {ai2d.num_images}"
-        print(f"ai2d loader: OK ({ai2d.num_images} images, {ai2d.num_captions} texts)")
+    scicap_ready = resolve_path(config, "scicap_processed_dir").exists()
+    if scicap_ready:
+        scicap = load_dataset_from_config(config, "scicap", "test", max_images=5)
+        assert scicap.num_images == 5, f"Expected 5 SciCap images, got {scicap.num_images}"
+        print(f"scicap loader: OK ({scicap.num_images} images, {scicap.num_captions} captions)")
     else:
-        print("ai2d loader: skipped (dataset files are not included in this repository)")
+        print("scicap loader: skipped (processed dataset files are not included in this repository)")
 
     similarity = [
         [0.6, 0.2, 0.9, 0.8],
@@ -168,7 +170,7 @@ def main(argv: list[str] | None = None) -> int:
             "--model",
             "all",
             "--dataset",
-            "ai2d",
+            "scicap",
             "--split",
             "test",
             "--max-images",
@@ -186,7 +188,7 @@ def main(argv: list[str] | None = None) -> int:
         "--config",
         args.config,
         "--dataset",
-        "ai2d",
+        "scicap",
         "--split",
         "test",
         "--max-images",
@@ -196,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
         "--config",
         args.config,
         "--dataset",
-        "ai2d",
+        "scicap",
         "--split",
         "test",
         "--max-images",

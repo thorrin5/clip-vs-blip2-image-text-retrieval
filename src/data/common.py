@@ -1,4 +1,4 @@
-"""Common dataset structures."""
+"""Spoločné dátové štruktúry pre image-text retrieval datasety."""
 
 from __future__ import annotations
 
@@ -10,6 +10,14 @@ import json
 
 @dataclass
 class RetrievalDataset:
+    """
+    Jednotná reprezentácia datasetu pre retrieval evaluáciu.
+
+    `image_paths` obsahuje cesty k obrázkom, `captions` obsahuje všetky textové
+    kandidáty a `image_to_captions` určuje, ktoré caption indexy sú správne pre
+    konkrétny obrázok. Táto štruktúra umožňuje použiť rovnaký výpočet Recall@K
+    pre Flickr30K aj SciCap.
+    """
     name: str
     split: str
     image_paths: List[str]
@@ -20,13 +28,16 @@ class RetrievalDataset:
 
     @property
     def num_images(self) -> int:
+        """Vráti počet obrázkových dotazov v datasete."""
         return len(self.image_paths)
 
     @property
     def num_captions(self) -> int:
+        """Vráti počet textových kandidátov v datasete."""
         return len(self.captions)
 
     def to_metadata(self) -> dict:
+        """Pripraví stručné metadáta zapisované do raw JSON výsledkov."""
         return {
             "name": self.name,
             "split": self.split,
@@ -38,11 +49,18 @@ class RetrievalDataset:
 
 
 def load_json(path: str | Path) -> dict:
+    """Načíta JSON súbor s UTF-8 kódovaním."""
     with Path(path).open("r", encoding="utf-8") as handle:
         return json.load(handle)
 
 
 def limit_dataset(dataset: RetrievalDataset, max_images: int | None) -> RetrievalDataset:
+    """
+    Obmedzí dataset na prvých `max_images` obrázkov.
+
+    Používa sa pri smoke testoch a malých kontrolných behoch. Funkcia zároveň
+    prečísluje caption indexy tak, aby mapovanie ostalo konzistentné.
+    """
     if max_images is None or dataset.num_images <= max_images:
         return dataset
 
@@ -64,4 +82,3 @@ def limit_dataset(dataset: RetrievalDataset, max_images: int | None) -> Retrieva
         metadata_file=dataset.metadata_file,
         text_description=dataset.text_description,
     )
-

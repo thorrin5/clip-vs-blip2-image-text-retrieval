@@ -1,4 +1,4 @@
-"""Configuration loading helpers."""
+"""Pomocné funkcie na načítanie a interpretáciu experimentálnej konfigurácie."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 
 def load_config(path: str | Path) -> Dict[str, Any]:
-    """Load the YAML experiment config."""
+    """Načíta YAML konfiguráciu experimentu ako slovník."""
     try:
         import yaml
     except ImportError as exc:
@@ -22,6 +22,7 @@ def load_config(path: str | Path) -> Dict[str, Any]:
 
 
 def project_root(config: Dict[str, Any]) -> Path:
+    """Vráti koreň projektu definovaný v konfigurácii alebo aktuálny adresár."""
     root = config.get("paths", {}).get("project_root")
     if root:
         return Path(root)
@@ -29,7 +30,7 @@ def project_root(config: Dict[str, Any]) -> Path:
 
 
 def resolve_path(config: Dict[str, Any], key: str) -> Path:
-    """Resolve a configured path key relative to project_root when needed."""
+    """Vyrieši konfiguračnú cestu relatívne ku koreňu projektu, ak treba."""
     paths = config.get("paths", {})
     if key not in paths:
         raise KeyError(f"Missing paths.{key} in config")
@@ -40,6 +41,6 @@ def resolve_path(config: Dict[str, Any], key: str) -> Path:
 
 
 def get_recall_k(config: Dict[str, Any]) -> list[int]:
+    """Načíta zoznam hodnôt K pre metriky Recall@K."""
     values = config.get("evaluation", {}).get("recall_k", [1, 5, 10])
     return [int(value) for value in values]
-

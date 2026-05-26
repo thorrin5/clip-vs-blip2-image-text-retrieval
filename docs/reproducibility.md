@@ -20,7 +20,7 @@ Place Flickr30K and SciCap files under the paths configured in [`../configs/expe
 python -m src.prepare_scicap_split --snapshot data/scicap_source
 ```
 
-The repository does not redistribute Flickr30K, SciCap, AI2D, or raw dataset images.
+The repository does not redistribute Flickr30K, SciCap, or raw dataset images.
 
 ## Evaluation
 
@@ -38,4 +38,3 @@ python -m src.analysis.plot_training_curves
 ```
 
 Regenerating qualitative SciCap collages requires fine-tuned checkpoints. Set `CLIP_SCICAP_CKPT` and `BLIP2_SCICAP_CKPT` to local checkpoint paths before running `python -m src.analysis.make_collages`.
-

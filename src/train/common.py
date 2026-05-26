@@ -1,8 +1,9 @@
-"""Shared helpers for canonical fine-tuning.
+"""Spoločné pomocné funkcie pre fine-tuning na datasete SciCap.
 
-The SciCap fine-tuning scripts share dataset conversion, seed setup, checkpoint
-writing, and JSON payload construction here. Keeping these details centralized
-helps ensure CLIP and BLIP-2 write comparable result artifacts.
+Funkcie v tomto module používajú oba fine-tuning skripty. Centralizujú prevod
+retrieval datasetu na trénovacie páry, nastavenie seedov, zápis checkpointov,
+histórií a výstupných JSON súborov, aby CLIP aj BLIP-2 produkovali porovnateľné
+artefakty.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Any
 
 from PIL import Image
 
-from src.eval.common import load_dataset_from_config, write_json_result, write_json_result_to
+from src.eval.common import load_dataset_from_config, write_json_result_to
 from src.eval.retrieval_metrics import compact_metrics, compute_retrieval_metrics
 from src.utils.config import get_recall_k, load_config, resolve_path
 from src.utils.paths import ensure_output_dirs, timestamp
@@ -29,7 +30,13 @@ class TrainSample:
 
 
 class PairDataset:
-    """Load paired image/text samples lazily for PyTorch DataLoader workers."""
+    """
+    PyTorch dataset pre páry obrázok-text.
+
+    Obrázok sa načíta až v `__getitem__`, čo je vhodné pre DataLoader workery a
+    šetrí pamäť pri veľkých SciCap splitoch. Text sa môže voliteľne transformovať
+    podľa potrieb konkrétneho modelu.
+    """
 
     def __init__(self, samples: list[TrainSample], image_transform, text_transform=None) -> None:
         self.samples = samples
@@ -48,6 +55,7 @@ class PairDataset:
 
 
 def set_seed(seed: int) -> None:
+    """Nastaví seed pre Python, NumPy a PyTorch kvôli reprodukovateľnosti behov."""
     random.seed(seed)
     try:
         import numpy as np
@@ -66,7 +74,13 @@ def set_seed(seed: int) -> None:
 
 
 def dataset_to_samples(dataset) -> list[TrainSample]:
-    """Use the first caption per image as the supervised training pair."""
+    """
+    Prevedie retrieval dataset na zoznam trénovacích párov.
+
+    SciCap má vo verejnej finálnej pipeline jeden cieľový text na obrázok.
+    Funkcia preto vyberie prvý dostupný caption index a vytvorí z neho
+    supervidovaný pár používaný pri kontrastívnom tréningu.
+    """
     samples: list[TrainSample] = []
     for image_idx, image_path in enumerate(dataset.image_paths):
         caption_indices = dataset.image_to_captions[image_idx]
@@ -76,15 +90,8 @@ def dataset_to_samples(dataset) -> list[TrainSample]:
     return samples
 
 
-def load_ai2d_splits(config_path: str, max_train: int | None = None, max_eval: int | None = None):
-    config = load_config(config_path)
-    train = load_dataset_from_config(config, "ai2d", "train", max_train)
-    val = load_dataset_from_config(config, "ai2d", "val", max_eval)
-    test = load_dataset_from_config(config, "ai2d", "test", max_eval)
-    return config, train, val, test
-
-
 def load_scicap_splits(config_path: str, max_train: int | None = None, max_eval: int | None = None):
+    """Načíta SciCap train/val/test splity podľa konfiguračného súboru."""
     config = load_config(config_path)
     train = load_dataset_from_config(config, "scicap", "train", max_train)
     val = load_dataset_from_config(config, "scicap", "val", max_eval)
@@ -93,6 +100,7 @@ def load_scicap_splits(config_path: str, max_train: int | None = None, max_eval:
 
 
 def write_checkpoint(path: Path, payload: dict[str, Any]) -> Path:
+    """Uloží checkpoint modelu alebo jeho trénovateľných častí."""
     path.parent.mkdir(parents=True, exist_ok=True)
     import torch
 
@@ -101,6 +109,7 @@ def write_checkpoint(path: Path, payload: dict[str, Any]) -> Path:
 
 
 def append_training_csv(config: dict[str, Any], filename: str, row: dict[str, Any]) -> Path:
+    """Pridá riadok s tréningovými metrikami do CSV tabuľky."""
     ensure_output_dirs(config)
     output_path = Path(config["paths"].get("tables_root", "results/tables")) / filename
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -124,6 +133,13 @@ def build_finetune_payload(
     val_metrics: dict[str, Any],
     training: dict[str, Any],
 ) -> dict[str, Any]:
+    """
+    Vytvorí jednotný JSON payload pre fine-tuned výsledok.
+
+    Payload obsahuje informácie o modeli, datasete, validačných metrikách,
+    testovacích metrikách a tréningovej konfigurácii. Tento formát umožňuje
+    spätne vysledovať, z ktorého behu pochádza hodnota v tabuľke.
+    """
     payload = {
         "status": "ok",
         "implementation": implementation,
@@ -139,33 +155,30 @@ def build_finetune_payload(
     return payload
 
 
-def write_finetune_result(config: dict[str, Any], prefix: str, payload: dict[str, Any]) -> Path:
-    return write_json_result(config, f"{prefix}_ai2d_test_finetuned", payload)
-
-
 def write_scicap_finetune_result(config: dict[str, Any], prefix: str, payload: dict[str, Any]) -> Path:
+    """Zapíše výsledok fine-tuningu na SciCap do SciCap raw adresára."""
     raw_root = resolve_path(config, "scicap_raw_root")
     return write_json_result_to(raw_root, f"{prefix}_scicap_test_finetuned", payload)
 
 
 def write_training_history(path: Path, history: list[dict[str, Any]]) -> None:
+    """Uloží per-epoch históriu tréningu pre neskoršiu analýzu kriviek."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
-def checkpoint_name(model_key: str) -> str:
-    return f"{model_key}_ai2d_finetuned_{timestamp()}.pt"
-
-
 def scicap_checkpoint_name(model_key: str) -> str:
+    """Vytvorí názov checkpointu s časovou značkou pre SciCap beh."""
     return f"{model_key}_scicap_finetuned_{timestamp()}.pt"
 
 
 def compute_similarity_metrics(similarity, dataset, config: dict[str, Any], timings: dict[str, float] | None = None):
+    """Vypočíta Recall@K metriky zo similarity matice a ground-truth mapovania."""
     return compute_retrieval_metrics(similarity, dataset.image_to_captions, get_recall_k(config), timings=timings or {})
 
 
 def metric_row(model: str, implementation: str, dataset, metrics: dict[str, Any], raw_json: Path) -> dict[str, Any]:
+    """Pripraví plochý CSV riadok s metrikami pre výsledkovú tabuľku."""
     return {
         "model": model,
         "implementation": implementation,

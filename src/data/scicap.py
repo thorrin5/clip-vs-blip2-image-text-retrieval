@@ -1,8 +1,8 @@
-"""SciCap loader for scientific figure-caption retrieval experiments.
+"""Načítanie SciCap splitov pre scientific figure-caption retrieval.
 
-SciCap is represented as JSONL after preprocessing. Each row has exactly one
-figure and one `caption_used`, which makes the retrieval task a clean one-to-one
-matching problem for both image-to-text and text-to-image directions.
+SciCap je po preprocessingu uložený ako JSONL. Každý riadok obsahuje jeden
+obrázok vedeckej figúry a jeden `caption_used`, takže výsledná retrieval úloha
+je one-to-one párovanie v smere image-to-text aj text-to-image.
 """
 
 from __future__ import annotations
@@ -18,10 +18,12 @@ def load_scicap(
     split: str = "test",
     max_images: int | None = None,
 ) -> RetrievalDataset:
-    """Load a SciCap processed split from JSONL.
+    """
+    Načíta spracovaný SciCap split z JSONL súboru.
 
-    Each JSONL line is expected to have:
-        id, image_path, caption_original, caption_used, source
+    Každý riadok obsahuje identifikátor, cestu k obrázku, pôvodný caption a
+    skrátený `caption_used`. Evaluácia používa `caption_used`, pretože ide o
+    rovnaký textový vstup pre CLIP aj BLIP-2.
     """
     processed_dir = Path(processed_dir)
     jsonl_path = processed_dir / f"{split}.jsonl"
@@ -44,6 +46,7 @@ def load_scicap(
             image_path = Path(record["image_path"])
             if not image_path.exists():
                 continue
+            # Používa sa predspracovaný caption, nie celý pôvodný text z článku.
             caption = record["caption_used"].strip()
             if not caption:
                 continue

@@ -1,27 +1,14 @@
 """
-Purpose:
-    Fine-tune Hugging Face BLIP-2 retrieval heads on SciCap pairs.
+Fine-tuning retrieval častí modelu BLIP-2 na dvojiciach zo SciCap.
 
-Thesis context:
-    This script adapts Salesforce/blip2-itm-vit-g for SciCap while keeping the
-    large vision backbone frozen. It is the BLIP-2 fine-tuning counterpart to
-    the CLIP SciCap fine-tuning script.
+Skript adaptuje checkpoint Salesforce/blip2-itm-vit-g na vedecké obrázky a
+popisy. Veľká vizuálna chrbtica ostáva zmrazená a trénujú sa iba časti
+súvisiace s retrievalom, najmä Q-Former, projekcie a ITM hlava. Validácia a
+testovanie môžu stále používať top-k ITM preusporiadanie, preto je beh
+výpočtovo náročnejší než pri CLIP.
 
-Inputs:
-    - Experiment YAML config.
-    - data/scicap_processed/{train,val,test}.jsonl.
-    - SciCap images referenced by the JSONL rows.
-
-Outputs:
-    - Trainable BLIP-2 checkpoint state under results/scicap/checkpoints.
-    - Per-epoch training history JSON.
-    - Raw fine-tuned SciCap test metrics JSON.
-    - CSV row in results/scicap/tables/scicap_finetuned_results.csv.
-
-Defense note:
-    This script explains why BLIP-2 fine-tuning is computationally heavier than
-    CLIP fine-tuning. Only retrieval-related parameters are trained, but
-    validation and final testing can still include expensive ITM reranking.
+Výstupom je stav trénovateľných váh, história tréningu, surové metriky v JSON
+a CSV riadok pre výsledkové tabuľky.
 """
 
 from __future__ import annotations
@@ -54,6 +41,7 @@ from src.utils.paths import ensure_output_dirs
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Definuje argumenty pre experiment fine-tuningu BLIP-2 na SciCap."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_config.yaml")
     parser.add_argument("--epochs", type=int, default=None)
@@ -76,7 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def get_cosine_schedule_with_warmup(optimizer, warmup_steps: int, total_steps: int):
-    """Small local scheduler to avoid adding a dependency just for LR decay."""
+    """
+    Vytvorí kosínusový learning-rate schedule s warmup fázou.
+
+    Lokálna implementácia zabraňuje pridaniu ďalšej závislosti iba kvôli
+    plánovaču učenia a zároveň presne dokumentuje použitý priebeh learning rate.
+    """
     def lr_lambda(current_step: int) -> float:
         if current_step < warmup_steps:
             return current_step / max(1, warmup_steps)
@@ -87,7 +80,12 @@ def get_cosine_schedule_with_warmup(optimizer, warmup_steps: int, total_steps: i
 
 
 def set_trainable(model) -> None:
-    """Freeze the large BLIP-2 backbone and train only retrieval-related parts."""
+    """
+    Zmrazí veľkú BLIP-2 chrbticu a ponechá trénovateľné len retrieval časti.
+
+    Tento krok znižuje pamäťové aj časové nároky experimentu. Súčasne jasne
+    oddeľuje doménovú adaptáciu retrieval hláv od plného pretrénovania modelu.
+    """
     for parameter in model.parameters():
         parameter.requires_grad = False
     trainable_prefixes = (
@@ -104,11 +102,18 @@ def set_trainable(model) -> None:
 
 
 def trainable_state_dict(model) -> dict:
-    """Save only trainable weights so checkpoints stay smaller and clearer."""
+    """
+    Vráti iba trénovateľné váhy určené na uloženie do checkpointu.
+
+    Checkpoint tak neobsahuje veľké zmrazené váhy, ktoré sa sťahujú z
+    oficiálneho Hugging Face checkpointu a nepatria do verejného repozitára.
+    """
     return {name: value.detach().cpu() for name, value in model.state_dict().items() if name in {n for n, p in model.named_parameters() if p.requires_grad}}
 
 
 def make_collate(processor):
+    """Pripraví collate funkciu s BLIP-2 processorom pre obrázky aj texty."""
+
     def collate(batch):
         images, texts = zip(*batch)
         inputs = processor(images=list(images), text=list(texts), return_tensors="pt", padding=True, truncation=True)
@@ -118,14 +123,25 @@ def make_collate(processor):
 
 
 def itc_loss(outputs):
-    """Symmetric contrastive loss over the current micro-batch."""
+    """
+    Vypočíta symetrickú kontrastívnu ITC loss pre aktuálnu mikro-dávku.
+
+    ITC časť podporuje globálne zladenie obrazových a textových reprezentácií,
+    ktoré sa následne používa na vytvorenie kandidátskej matice podobností.
+    """
     logits = outputs.logits_per_image.float()
     labels = torch.arange(logits.shape[0], device=logits.device)
     return (F.cross_entropy(logits, labels) + F.cross_entropy(logits.t(), labels)) / 2
 
 
 def itm_loss(model, inputs):
-    """Construct simple positive/negative ITM pairs inside the batch."""
+    """
+    Vytvorí pozitívne a negatívne ITM páry vo vnútri dávky.
+
+    Pôvodné páry obrázok-text sú pozitívne. Negatívne páry vzniknú posunutím
+    textov v dávke, takže obrázok dostane nesúvisiaci popis. ITM hlava sa tým
+    učí rozlišovať zhodné a nezhodné dvojice.
+    """
     batch_size = inputs["input_ids"].shape[0]
     if batch_size < 2:
         return inputs["input_ids"].new_tensor(0.0, dtype=torch.float32)
@@ -149,7 +165,13 @@ def itm_loss(model, inputs):
 
 
 def evaluate(wrapper: HuggingFaceBlip2RetrievalWrapper, dataset, config: dict, rerank_top_k: int | None, pair_batch_size: int):
-    """Evaluate BLIP-2 with the same ITC plus optional ITM pipeline as zero-shot."""
+    """
+    Vyhodnotí BLIP-2 rovnakou ITC a voliteľnou ITM pipeline ako zero-shot beh.
+
+    Najprv sa vypočítajú embeddingy a ITC matica podobností. Ak je nastavené
+    `rerank_top_k`, najlepší kandidáti sa znovu ohodnotia ITM hlavou, čím sa
+    meria presnejší, ale pomalší variant retrievalu.
+    """
     eval_cfg = config["evaluation"]
     batch_images = int(eval_cfg.get("batch_size_images", 16))
     batch_texts = int(eval_cfg.get("batch_size_texts", 256))
@@ -178,6 +200,7 @@ def evaluate(wrapper: HuggingFaceBlip2RetrievalWrapper, dataset, config: dict, r
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Riadi celý BLIP-2 fine-tuning vrátane validácie, checkpointov a exportu."""
     args = build_parser().parse_args(argv)
     config, train_split, val_split, test_split = load_scicap_splits(args.config, args.max_train, args.max_eval)
     ensure_output_dirs(config)
@@ -209,8 +232,8 @@ def main(argv: list[str] | None = None) -> int:
 
     model_cfg = config["models"]["blip2"]
     wrapper = HuggingFaceBlip2RetrievalWrapper(model_cfg["model_name"], device="cuda", precision="fp32")
-    # Keeping the ViT-G vision encoder frozen makes the experiment feasible on
-    # the cluster and matches the thesis explanation of trainable parameters.
+    # Zmrazenie veľkého ViT-G obrazového enkódera robí experiment realizovateľný
+    # na dostupnom hardvéri a zodpovedá popisu trénovateľných parametrov v práci.
     set_trainable(wrapper.model)
     wrapper.model.train()
 
@@ -291,8 +314,8 @@ def main(argv: list[str] | None = None) -> int:
         wrapper.model.eval()
         val_metrics = evaluate(wrapper, val_split, config, rerank_top_k, pair_batch_size)
         val_mean = float(val_metrics["mean"]["R@1"])
-        # Validation Mean R@1 selects the checkpoint that best matches the main
-        # thesis metric before the final test split is touched.
+        # Validačný Mean R@1 vyberá checkpoint podľa hlavnej metriky práce ešte
+        # pred tým, ako sa použije finálny test split.
         improved = best_epoch is None or val_mean > best_val + early_stopping_min_delta
         if improved:
             best_val = val_mean
@@ -314,6 +337,8 @@ def main(argv: list[str] | None = None) -> int:
         print(row)
         if improved:
             best_path = checkpoint_dir / scicap_checkpoint_name("blip2")
+            # Ukladá sa len najlepší stav trénovateľných váh; kompletné váhy
+            # modelu zostávajú externé a sťahujú sa z Hugging Face.
             write_checkpoint(
                 best_path,
                 {

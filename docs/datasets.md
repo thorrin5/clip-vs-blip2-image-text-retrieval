@@ -16,11 +16,6 @@ SciCap is used for scientific figure-caption retrieval. The project creates dete
 
 Captions are preprocessed to remove figure-label prefixes and reduce long multi-sentence captions to a shorter shared caption representation. This keeps the comparison fairer for CLIP, whose text encoder has a 77-token context limit.
 
-## AI2D
-
-AI2D appears in the result files as historical exploratory material. It is not the main final comparison dataset.
-
 ## License Boundaries
 
 Datasets are not included in this repository. Download them from their official sources and follow their original licenses and terms. The repository license covers only the original code and documentation here.
-

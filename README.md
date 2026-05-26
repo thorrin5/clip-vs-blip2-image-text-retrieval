@@ -25,7 +25,6 @@ Datasets are not included in this repository.
 |---|---|---|
 | Flickr30K | Zero-shot retrieval benchmark | Karpathy test split, 1,000 images and 5,000 captions |
 | SciCap | Scientific-domain transfer and fine-tuning | 45,000 train, 1,000 validation, 1,000 test pairs created with seed 42 |
-| AI2D | Historical exploratory experiments | Retained in results for traceability, not the final thesis focus |
 
 ## Evaluation
 
@@ -45,10 +44,6 @@ Values below are copied from [`results/full_comparison.csv`](results/full_compar
 |---|---:|---:|---:|---:|---:|---:|
 | Flickr30K | CLIP | zero-shot | 75.06 | 92.34 | 95.56 | 5 |
 | Flickr30K | BLIP-2 | zero-shot | 91.55 | 98.37 | 99.19 | 4247 |
-| AI2D | CLIP | zero-shot | 8.55 | 26.77 | 37.10 | 3 |
-| AI2D | BLIP-2 | zero-shot | 10.65 | 26.13 | 37.42 | 701 |
-| AI2D | CLIP | fine-tuned | 16.94 | 39.35 | 49.84 | 3 |
-| AI2D | BLIP-2 | fine-tuned | 15.97 | 39.68 | 52.90 | 1551 |
 | SciCap | CLIP | zero-shot | 21.65 | 33.95 | 40.25 | 13 |
 | SciCap | BLIP-2 | zero-shot | 26.30 | 35.55 | 39.95 | 1988 |
 | SciCap | CLIP | fine-tuned | 33.95 | 50.55 | 58.10 | 10 |
@@ -61,7 +56,7 @@ On Flickr30K, BLIP-2 achieved higher retrieval accuracy but was much slower beca
 | Path | Contents |
 |---|---|
 | [`src/models`](src/models) | CLIP and BLIP-2 wrappers |
-| [`src/data`](src/data) | Dataset loaders for Flickr30K, SciCap, and AI2D metadata |
+| [`src/data`](src/data) | Dataset loaders for Flickr30K and SciCap |
 | [`src/eval`](src/eval) | Evaluation entrypoints and Recall@K metrics |
 | [`src/train`](src/train) | SciCap fine-tuning scripts |
 | [`src/analysis`](src/analysis) | Result archive, plot, and collage utilities |
@@ -106,4 +101,3 @@ Full reproduction requires the external datasets, official model downloads, GPU 
 This repository is for academic reproducibility. Datasets are not redistributed and must be obtained from their official sources. Model weights and checkpoints are not included and remain governed by their original licenses. The small qualitative collages are included only as selected retrieval examples, not as dataset redistribution.
 
 The MIT license applies to the original source code in this repository. It does not grant rights over external datasets, model weights, benchmark images, or third-party model code.
-

@@ -1,26 +1,11 @@
 """
-Purpose:
-    Evaluate Hugging Face BLIP-2 for image-text retrieval.
+Zero-shot evaluácia Hugging Face BLIP-2 pre image-text retrieval.
 
-Thesis context:
-    This is the BLIP-2 zero-shot evaluation entrypoint for Flickr30K and
-    SciCap. It implements ITC candidate scoring and optional top-k ITM
-    reranking with Salesforce/blip2-itm-vit-g.
-
-Inputs:
-    - Experiment YAML config.
-    - Dataset name and split selected by --dataset and --split.
-    - Optional rerank top-k, pair batch size, and max-images arguments.
-
-Outputs:
-    - Raw JSON metrics with ITC and ITM timing fields.
-    - CSV summary row under the configured result tables directory.
-    - Embedded ITC-only metrics when ITM reranking is enabled.
-
-Defense note:
-    This script is central to the accuracy-versus-cost argument. BLIP-2 can
-    score image-text pairs more deeply through ITM reranking, but each selected
-    pair is expensive, which explains the large runtime difference from CLIP.
+Skript vyhodnocuje model Salesforce/blip2-itm-vit-g na Flickr30K a SciCap.
+Najprv počíta ITC podobnosť pre všetky kandidátske dvojice. Voliteľne potom
+pre najlepších top-k kandidátov spustí ITM preusporiadanie, ktoré je presnejšie,
+ale výrazne náročnejšie na čas. Práve tento rozdiel tvorí jadro porovnania
+presnosti a výpočtových nákladov oproti CLIP.
 """
 
 from __future__ import annotations
@@ -38,9 +23,10 @@ from src.utils.paths import ensure_output_dirs
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Definuje CLI argumenty pre BLIP-2 ITC/ITM evaluáciu."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_config.yaml")
-    parser.add_argument("--dataset", choices=["flickr30k", "ai2d", "scicap"], default="flickr30k")
+    parser.add_argument("--dataset", choices=["flickr30k", "scicap"], default="flickr30k")
     parser.add_argument("--split", default="test")
     parser.add_argument("--max-images", type=int, default=None)
     parser.add_argument("--rerank-top-k", type=int, default=None)
@@ -52,6 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _combine_directional_metrics(image_to_text: dict, text_to_image: dict, k_values: list[int], timings: dict) -> dict:
+    """Spojí smerové metriky do rovnakého formátu, aký používa hlavný výpočet."""
     mean_recall = {
         f"R@{k}": (float(image_to_text[f"R@{k}"]) + float(text_to_image[f"R@{k}"])) / 2.0
         for k in k_values
@@ -67,7 +54,13 @@ def _combine_directional_metrics(image_to_text: dict, text_to_image: dict, k_val
 
 
 def _rerank_matrix(model, base_similarity, dataset, top_k: int, direction: str, batch_size: int):
-    """Build a sparse reranked score matrix for one retrieval direction."""
+    """
+    Vytvorí riedku maticu skóre po ITM preusporiadaní pre jeden smer retrievalu.
+
+    Do ITM hlavy posiela iba top-k kandidátov podľa rýchlej ITC podobnosti.
+    Ostatné pozície zostávajú na hodnote `-inf`, aby sa nemohli dostať na
+    popredné miesta v rebríčku po preusporiadaní.
+    """
     torch = model.torch
     num_images = dataset.num_images
     num_captions = dataset.num_captions
@@ -76,8 +69,8 @@ def _rerank_matrix(model, base_similarity, dataset, top_k: int, direction: str, 
     text_pairs: list[str] = []
     positions: list[tuple[int, int]] = []
 
-    # Only top-k ITC candidates are sent through the expensive cross-attention
-    # ITM head. All other scores stay -inf so they cannot win the reranked list.
+    # Len top-k ITC kandidáti sa posielajú cez drahú ITM hlavu. Ostatné skóre
+    # ostanú -inf, takže nemôžu vyhrať v preusporiadanom rebríčku.
     if direction == "image_to_text":
         k = min(top_k, num_captions)
         candidates = torch.topk(base_similarity, k=k, dim=1).indices
@@ -104,7 +97,13 @@ def _rerank_matrix(model, base_similarity, dataset, top_k: int, direction: str, 
 
 
 def _compute_topk_itm_metrics(model, base_similarity, dataset, top_k: int, k_values: list[int], batch_size: int) -> tuple[dict, dict]:
-    """Run directional ITM reranking and return metrics plus timing details."""
+    """
+    Spustí ITM preusporiadanie v oboch smeroch a vráti metriky aj časovanie.
+
+    Image-to-text a text-to-image smer sa rátajú oddelene, pretože počet
+    kandidátov a výsledné poradia sa líšia. Nakoniec sa metriky spoja do
+    rovnakého formátu, aký používa základná Recall@K evaluácia.
+    """
     timings: dict[str, float] = {"rerank_top_k": float(top_k)}
 
     start = time.time()
@@ -147,6 +146,13 @@ def _compute_topk_itm_metrics(model, base_similarity, dataset, top_k: int, k_val
 
 
 def main(argv: list[str] | None = None) -> int:
+    """
+    Spustí BLIP-2 evaluáciu s voliteľným ITM re-rankingom.
+
+    Najprv sa vypočíta ITC podobnosť pre všetky páry. Ak je zadané
+    `--rerank-top-k`, najlepšie kandidáty sa následne prehodnotia drahšou ITM
+    hlavou, čo je hlavný zdroj vyššej latencie BLIP-2 v práci.
+    """
     args = build_parser().parse_args(argv)
     config = load_config(args.config)
     ensure_output_dirs(config)
@@ -190,8 +196,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Blocker written to {output_path}")
             return 2
 
-    # As with CLIP, a blocked result is written when dependencies or model
-    # weights are unavailable, keeping failed cluster attempts auditable.
+    # Rovnako ako pri CLIP sa pri chýbajúcich závislostiach alebo váhach uloží
+    # blokovaný výsledok, aby bol neúspešný beh spätne vysvetliteľný.
     try:
         model = HuggingFaceBlip2RetrievalWrapper(
             model_config["model_name"],
@@ -237,8 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     rerank_details: dict = {}
 
     if args.rerank_top_k is not None:
-        # This is the accuracy/runtime trade-off studied in the thesis:
-        # exact ITC over all pairs, followed by ITM over a bounded top-k set.
+        # Toto je jadro kompromisu presnosť/čas: ITC vyberie kandidátov a ITM
+        # prepočíta iba obmedzenú top-k množinu párov.
         rerank_metrics, rerank_timings = _compute_topk_itm_metrics(
             model,
             similarity,

@@ -1,4 +1,4 @@
-"""Dispatch canonical evaluations."""
+"""Spustenie kanonických evaluácií pre zvolený model a dataset."""
 
 from __future__ import annotations
 
@@ -12,10 +12,11 @@ MODEL_ORDER = ("clip", "blip2")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Definuje argumenty spoločného CLI rozhrania pre CLIP a BLIP-2."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_config.yaml")
     parser.add_argument("--model", choices=["clip", "blip2", "all"], default="all")
-    parser.add_argument("--dataset", choices=["flickr30k", "ai2d", "scicap"], default="flickr30k")
+    parser.add_argument("--dataset", choices=["flickr30k", "scicap"], default="flickr30k")
     parser.add_argument("--split", default="test")
     parser.add_argument("--max-images", type=int, default=None)
     parser.add_argument("--rerank-top-k", type=int, default=None)
@@ -25,12 +26,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def selected_models(model: str) -> list[str]:
+    """Prevedie voľbu `all` na konkrétny zoznam modelov."""
     if model == "all":
         return list(MODEL_ORDER)
     return [model]
 
 
 def build_model_argvs(args: argparse.Namespace) -> dict[str, list[str]]:
+    """
+    Pripraví argumenty pre samostatné evaluačné skripty.
+
+    CLIP aj BLIP-2 dostávajú rovnaké datasetové argumenty. Parametre rerankingu
+    sa posielajú iba BLIP-2, pretože ITM re-ranking nie je súčasťou CLIP
+    pipeline.
+    """
     common_args = [
         "--config",
         args.config,

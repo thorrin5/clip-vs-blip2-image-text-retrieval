@@ -1,8 +1,6 @@
-"""Dataset loaders for canonical retrieval experiments."""
+"""Načítavanie datasetov použitých vo finálnej verejnej verzii experimentov."""
 
-from .ai2d import load_ai2d
 from .flickr30k import load_flickr30k_karpathy
 from .scicap import load_scicap
 
-__all__ = ["load_ai2d", "load_flickr30k_karpathy", "load_scicap"]
-
+__all__ = ["load_flickr30k_karpathy", "load_scicap"]

@@ -1,49 +1,47 @@
 #!/usr/bin/env python3
 """
-Purpose:
-    Prepare deterministic SciCap figure-caption retrieval splits for the thesis
-    experiments.
+Účel:
+    Pripraviť deterministické SciCap splity pre retrieval experimenty.
 
-Thesis context:
-    This script creates the SciCap train/validation/test JSONL files used by
-    CLIP and BLIP-2 zero-shot evaluation and SciCap fine-tuning.
+Kontext práce:
+    Skript vytvára súbory train/validation/test vo formáte JSONL používané pri
+    zero-shot evaluácii aj fine-tuningu modelov CLIP a BLIP-2 na SciCap.
 
-Inputs:
-    - hidden-test.json from the local Hugging Face CrowdAILab/scicap snapshot.
-    - img-hide_test.zip from the same snapshot.
+Vstupy:
+    - hidden-test.json z lokálneho snapshotu Hugging Face CrowdAILab/scicap.
+    - img-hide_test.zip z rovnakého snapshotu.
 
-Outputs:
-    - data/scicap/images/*.png for selected scientific figures.
-    - data/scicap_processed/train.jsonl, val.jsonl, and test.jsonl.
+Výstupy:
+    - data/scicap/images/*.png pre vybrané vedecké obrázky.
+    - data/scicap_processed/train.jsonl, val.jsonl a test.jsonl.
 
-Defense note:
-    This script is the reproducible bridge between the raw SciCap archive and
-    the retrieval benchmark used in the experiments. It also stores
-    caption_original and caption_used so caption preprocessing is auditable.
+Poznámka k obhajobe:
+    Skript tvorí reprodukovateľný most medzi surovým SciCap archívom a
+    retrieval benchmarkom použitým v experimentoch. Ukladá `caption_original`
+    aj `caption_used`, aby bolo spracovanie popisov spätne kontrolovateľné.
 
-Additional implementation notes:
+Implementačné poznámky:
 
-Reads annotation data from the HuggingFace cache (CrowdAILab/scicap),
-extracts images from img-hide_test.zip, applies caption preprocessing,
-and writes train/val/test JSONL splits to data/scicap_processed/.
+Načíta anotácie z lokálneho snapshotu CrowdAILab/scicap, extrahuje vybrané
+obrázky z archívu img-hide_test.zip, aplikuje preprocessing popisov a zapíše
+train/val/test JSONL splity do data/scicap_processed/.
 
-Image source: hidden-test split from the SciCap HuggingFace snapshot.
-We use these 47,639 figure-caption pairs to create our own train/val/test
-splits for retrieval experiments — the challenge label ("hidden test") is
-irrelevant here; for our purposes these are simply scientific figures with
-ground-truth captions.
+Zdroj obrázkov je hidden-test split zo SciCap snapshotu. Z dostupných dvojíc
+obrázok-popis sa deterministicky vytvoria vlastné train/val/test splity pre
+retrieval experimenty; označenie pôvodného challenge splitu tu neovplyvňuje
+spôsob vyhodnotenia.
 
-Split sizes (seed=42):
+Veľkosti splitov (seed=42):
     train: 45,000
     val:   1,000
     test:  1,000
 
-Inputs:
-    - hidden-test.json from the local Hugging Face SciCap snapshot
-    - img-hide_test.zip from the same snapshot
+Vstupy:
+    - hidden-test.json z lokálneho SciCap snapshotu
+    - img-hide_test.zip z rovnakého snapshotu
 
-Outputs:
-    - data/scicap/images/*.png for selected figures
+Výstupy:
+    - data/scicap/images/*.png pre vybrané obrázky
     - data/scicap_processed/train.jsonl
     - data/scicap_processed/val.jsonl
     - data/scicap_processed/test.jsonl
@@ -80,6 +78,7 @@ _MULTI_SPACE = re.compile(r"\s+")
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Vytvorí príkazový parser pre cesty k surovému SciCap snapshotu."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--snapshot",
@@ -115,20 +114,29 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def remove_figure_prefix(text: str) -> str:
+    """Odstráni typické prefixy typu `Figure 1:` zo začiatku popisu."""
     return _FIG_PREFIX_RE.sub("", text).strip()
 
 
 def normalize_whitespace(text: str) -> str:
+    """Zjednotí viacnásobné medzery a riadkové zlomy na jednu medzeru."""
     return _MULTI_SPACE.sub(" ", text).strip()
 
 
 def split_sentences(text: str) -> list[str]:
+    """Rozdelí popis na vety jednoduchým pravidlom podľa interpunkcie."""
     parts = re.split(r"(?<=[.!?])\s+", text)
     return [p.strip() for p in parts if p.strip()]
 
 
 def make_caption_used(caption: str) -> str:
-    """Create the shared comparison caption used by both CLIP and BLIP-2."""
+    """
+    Vytvorí skrátený popis používaný rovnako pre CLIP aj BLIP-2.
+
+    Pri SciCap bývajú popisy dlhé a často začínajú technickým označením
+    obrázka. Funkcia odstráni tento prefix a ponechá prvú dostatočne
+    informatívnu vetu. Ak je prvá veta príliš krátka, spojí ju s druhou vetou.
+    """
     cleaned = remove_figure_prefix(caption)
     cleaned = normalize_whitespace(cleaned)
     sentences = split_sentences(cleaned)
@@ -147,6 +155,7 @@ def make_caption_used(caption: str) -> str:
 
 
 def load_annotations(path: Path) -> tuple[dict[int, str], dict[int, str]]:
+    """Načíta mapovanie identifikátorov obrázkov na názvy súborov a popisy."""
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
 
@@ -158,7 +167,12 @@ def load_annotations(path: Path) -> tuple[dict[int, str], dict[int, str]]:
 
 
 def extract_images(zip_path: Path, img_ids: set[int], output_dir: Path) -> dict[int, str]:
-    """Extract only selected figure images so the processed split is self-contained."""
+    """
+    Extrahuje iba vybrané obrázky potrebné pre vytvorený split.
+
+    Takýto postup šetrí diskový priestor pri lokálnej reprodukcii a zároveň
+    drží spracované splity jednoznačne naviazané na vybrané identifikátory.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     id_to_path: dict[int, str] = {}
     with zipfile.ZipFile(zip_path) as zf:
@@ -186,6 +200,12 @@ def build_records(
     id_to_caption: dict[int, str],
     id_to_path: dict[int, str],
 ) -> list[dict]:
+    """
+    Vytvorí JSONL záznamy so zdrojovou a použitou verziou popisu.
+
+    Pole `caption_original` slúži na audit spracovania a `caption_used` je
+    text, ktorý sa reálne vyhodnocuje v retrieval experimentoch.
+    """
     records = []
     for img_id, img_path in id_to_path.items():
         caption_orig = id_to_caption.get(img_id)
@@ -205,6 +225,7 @@ def build_records(
 
 
 def write_jsonl(path: Path, records: list[dict]) -> None:
+    """Zapíše zoznam záznamov do JSONL súboru s UTF-8 kódovaním."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
         for rec in records:
@@ -212,6 +233,13 @@ def write_jsonl(path: Path, records: list[dict]) -> None:
 
 
 def log_caption_stats(records: list[dict], label: str) -> None:
+    """
+    Vypíše štatistiky dĺžky popisov po preprocessing kroku.
+
+    Kontrola dĺžky je dôležitá pre CLIP, ktorý má pevný limit 77 tokenov.
+    Hodnoty pomáhajú overiť, či preprocessing znižuje riziko nadmerného
+    skracovania vedeckých popisov tokenizerom modelu.
+    """
     orig_lens = [len(r["caption_original"].split()) for r in records]
     used_lens = [len(r["caption_used"].split()) for r in records]
     shortened = sum(1 for o, u in zip(orig_lens, used_lens) if u < o)
@@ -240,6 +268,7 @@ def log_caption_stats(records: list[dict], label: str) -> None:
 
 
 def main() -> None:
+    """Spustí kompletnú prípravu SciCap splitov a zapíše výsledné JSONL súbory."""
     import random
     args = build_parser().parse_args()
     random.seed(SEED)

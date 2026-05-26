@@ -1,27 +1,13 @@
 """
-Purpose:
-    Fine-tune official OpenAI CLIP on SciCap retrieval pairs.
+Fine-tuning oficiálneho OpenAI CLIP modelu na dvojiciach zo SciCap.
 
-Thesis context:
-    This script produces the domain-adapted CLIP SciCap result used in the
-    thesis comparison. It trains on SciCap train, selects by validation Mean
-    R@1, and evaluates the best checkpoint on SciCap test.
+Skript vytvára doménovo adaptovaný CLIP výsledok použitý v porovnaní v
+bakalárskej práci. Model sa trénuje na SciCap train splite, checkpoint sa
+vyberá podľa validačného Mean R@1 a finálne hodnoty sa počítajú až na SciCap
+test splite. Tým sa zabraňuje výberu modelu podľa testovacích dát.
 
-Inputs:
-    - Experiment YAML config.
-    - data/scicap_processed/{train,val,test}.jsonl.
-    - SciCap images referenced by the JSONL rows.
-
-Outputs:
-    - Best CLIP checkpoint under results/scicap/checkpoints.
-    - Per-epoch training history JSON.
-    - Raw fine-tuned SciCap test metrics JSON.
-    - CSV row in results/scicap/tables/scicap_finetuned_results.csv.
-
-Defense note:
-    This script shows how domain adaptation is tested for CLIP. The validation
-    split prevents selecting on the test set, and the final metrics use the same
-    Recall@K implementation as the zero-shot experiments.
+Výstupom je checkpoint, história tréningu, surový JSON s metrikami a CSV
+riadok s hodnotami Recall@K pre výsledkové tabuľky.
 """
 
 from __future__ import annotations
@@ -54,6 +40,7 @@ from src.utils.paths import ensure_output_dirs
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Definuje argumenty pre experiment fine-tuningu CLIP na SciCap."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_config.yaml")
     parser.add_argument("--epochs", type=int, default=None)
@@ -71,7 +58,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def contrastive_loss(image_features, text_features, logit_scale):
-    """Symmetric CLIP InfoNCE loss with in-batch negatives."""
+    """
+    Vypočíta symetrickú CLIP InfoNCE loss s negatívami v rámci dávky.
+
+    Každý obrázok má v dávke jeden správny text a ostatné texty slúžia ako
+    negatívne príklady. Loss sa počíta v smere obrázok->text aj text->obrázok,
+    aby tréning zodpovedal obom retrieval úlohám vyhodnocovaným v práci.
+    """
     image_features = image_features / image_features.norm(dim=-1, keepdim=True)
     text_features = text_features / text_features.norm(dim=-1, keepdim=True)
     logits = logit_scale.exp() * image_features @ text_features.t()
@@ -80,6 +73,8 @@ def contrastive_loss(image_features, text_features, logit_scale):
 
 
 def make_collate(clip_module):
+    """Pripraví collate funkciu, ktorá skladá obrázky a tokenizuje texty."""
+
     def collate(batch):
         images, texts = zip(*batch)
         image_tensor = torch.stack(list(images))
@@ -90,7 +85,13 @@ def make_collate(clip_module):
 
 
 def evaluate(wrapper: OfficialOpenAIClipWrapper, dataset, config: dict, batch_images: int, batch_texts: int):
-    """Run the same retrieval evaluation used by the zero-shot CLIP script."""
+    """
+    Spustí rovnakú retrieval evaluáciu ako zero-shot CLIP skript.
+
+    Funkcia najprv vypočíta obrazové a textové embeddingy, potom maticu
+    podobností a nakoniec Recall@K metriky. Použitie rovnakej funkcie pre
+    zero-shot aj fine-tuned model zabezpečuje porovnateľnosť výsledkov.
+    """
     start = time.time()
     image_features = wrapper.encode_images(dataset.image_paths, batch_size=batch_images)
     image_time = time.time() - start
@@ -111,6 +112,7 @@ def evaluate(wrapper: OfficialOpenAIClipWrapper, dataset, config: dict, batch_im
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Riadi celý tréningový beh od načítania dát po zápis výsledkov."""
     args = build_parser().parse_args(argv)
     config, train_split, val_split, test_split = load_scicap_splits(args.config, args.max_train, args.max_eval)
     ensure_output_dirs(config)
@@ -156,8 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     optimizer = torch.optim.AdamW(wrapper.model.parameters(), lr=lr, weight_decay=weight_decay)
-    # The optional zero-shot snapshot lets the raw JSON record the before/after
-    # comparison without relying only on separate result files.
+    # Voliteľné zero-shot metriky umožnia v jednom JSON súbore porovnať stav
+    # pred fine-tuningom a po ňom bez manuálneho spájania výsledkov.
     zero_shot_metrics = None if args.skip_zero_shot else evaluate(wrapper, test_split, config, batch_images, batch_texts)
 
     best_val = -1.0
@@ -192,8 +194,8 @@ def main(argv: list[str] | None = None) -> int:
         wrapper.model.eval()
         val_metrics = evaluate(wrapper, val_split, config, batch_images, batch_texts)
         val_mean = float(val_metrics["mean"]["R@1"])
-        # Mean R@1 is the validation criterion because it is the primary thesis
-        # retrieval metric and is stricter than R@5/R@10.
+        # Mean R@1 je validačné kritérium, pretože ide o hlavnú a najprísnejšiu
+        # metriku používanú pri porovnaní retrieval modelov.
         improved = best_epoch is None or val_mean > best_val + early_stopping_min_delta
         if improved:
             best_val = val_mean
@@ -213,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
         print(row)
         if improved:
             best_path = checkpoint_dir / scicap_checkpoint_name("clip")
+            # Ukladá sa iba najlepší checkpoint podľa validačného splitu; test
+            # split sa použije až po skončení výberu modelu.
             write_checkpoint(
                 best_path,
                 {

@@ -19,7 +19,6 @@ data/flickr30k/
 data/scicap/
 data/scicap_source/
 data/scicap_processed/
-data/ai2d/
 
 # Model weights, checkpoints, and caches
 checkpoints/
@@ -66,4 +65,3 @@ bc_results_export.zip
 Thumbs.db
 .vscode/
 .idea/
-

@@ -1,28 +1,9 @@
 """
-Purpose:
-    Compute the shared image-text retrieval metrics for all thesis experiments.
+Výpočet spoločných retrieval metrík pre všetky finálne experimenty.
 
-Thesis context:
-    This module is model-neutral and is used for CLIP, BLIP-2, Flickr30K,
-    SciCap, zero-shot runs, and fine-tuned runs. Keeping metrics here ensures
-    the model comparison changes only the score matrix, not the evaluation rule.
-
-Inputs:
-    - Image-by-text score matrix where larger scores are better.
-    - Ground-truth image_to_captions mapping.
-    - Recall@K values, usually 1, 5, and 10.
-    - Optional timing metadata.
-
-Outputs:
-    - Image-to-text Recall@K and ranks.
-    - Text-to-image Recall@K and ranks.
-    - Mean Recall@K across both directions.
-    - Median ranks and timing metadata.
-
-Defense note:
-    This file is the answer to how fairness is enforced in evaluation. CLIP and
-    BLIP-2 produce different scores, but both scores are ranked and evaluated by
-    exactly the same Recall@K implementation.
+Modul je nezávislý od modelu. CLIP aj BLIP-2 dodajú maticu skóre obrázok × text
+a táto implementácia z nej vypočíta image-to-text, text-to-image a Mean Recall@K.
+Takto je zabezpečené, že porovnanie modelov používa rovnaké evaluačné pravidlá.
 """
 
 from __future__ import annotations
@@ -32,6 +13,7 @@ from typing import Any, Dict, Iterable, List
 
 
 def _to_list_matrix(similarity: Any) -> list[list[float]]:
+    """Prevedie PyTorch/NumPy maticu podobnosti na čistý Python zoznam."""
     if hasattr(similarity, "detach"):
         similarity = similarity.detach().cpu().tolist()
     elif hasattr(similarity, "tolist"):
@@ -40,11 +22,12 @@ def _to_list_matrix(similarity: Any) -> list[list[float]]:
 
 
 def _rank_desc(values: list[float]) -> list[int]:
+    """Vráti indexy kandidátov zoradené od najvyššieho skóre po najnižšie."""
     return sorted(range(len(values)), key=lambda index: values[index], reverse=True)
 
 
 def _validate_inputs(matrix: list[list[float]], image_to_captions: Dict[int, List[int]]) -> tuple[int, int]:
-    """Fail early when a score matrix cannot represent a valid retrieval task."""
+    """Skontroluje, či matica skóre a ground-truth mapovanie tvoria platnú úlohu."""
     if not matrix:
         raise ValueError("Similarity matrix is empty")
     if not matrix[0]:
@@ -81,7 +64,14 @@ def compute_retrieval_metrics(
     k_values: Iterable[int] = (1, 5, 10),
     timings: Dict[str, float] | None = None,
 ) -> Dict[str, Any]:
-    """Compute bidirectional retrieval metrics from an image x text score matrix."""
+    """
+    Vypočíta obojsmerné retrieval metriky z matice skóre.
+
+    `similarity` má rozmery počet obrázkov × počet textov a väčšie hodnoty
+    znamenajú lepšiu zhodu. Funkcia zisťuje, na akom poradí sa nachádza správny
+    text pre každý obrázok a správny obrázok pre každý text. Z poradí sa
+    následne vypočíta Recall@K.
+    """
     matrix = _to_list_matrix(similarity)
     image_to_captions = {
         int(image_idx): [int(caption_idx) for caption_idx in caption_indices]
@@ -92,8 +82,8 @@ def compute_retrieval_metrics(
     if not k_values or any(k <= 0 for k in k_values):
         raise ValueError("k_values must contain at least one positive integer")
 
-    # Build the inverse mapping for text-to-image retrieval. A caption can only
-    # be correct for one image in the evaluated splits.
+    # Pre text-to-image smer potrebujeme inverzné mapovanie z caption indexu na
+    # správny obrázok. Každý caption patrí práve jednému obrázku.
     caption_to_image: dict[int, int] = {}
     for image_idx, caption_indices in image_to_captions.items():
         for caption_idx in caption_indices:
@@ -106,6 +96,7 @@ def compute_retrieval_metrics(
 
     i2t_ranks: list[int] = []
     for image_idx in range(num_images):
+        # Image-to-text: pre daný obrázok hľadáme najvyššie umiestnený správny caption.
         ranked = _rank_desc(matrix[image_idx])
         rank_position = {candidate_idx: rank + 1 for rank, candidate_idx in enumerate(ranked)}
         correct = set(image_to_captions[int(image_idx)])
@@ -115,12 +106,14 @@ def compute_retrieval_metrics(
     t2i_ranks: list[int] = []
     columns = [[matrix[image_idx][caption_idx] for image_idx in range(num_images)] for caption_idx in range(num_texts)]
     for caption_idx in range(num_texts):
+        # Text-to-image: pre daný caption hľadáme poradie správneho obrázka.
         ranked = _rank_desc(columns[caption_idx])
         rank_position = {candidate_idx: rank + 1 for rank, candidate_idx in enumerate(ranked)}
         correct_image = caption_to_image[caption_idx]
         t2i_ranks.append(rank_position[correct_image])
 
     def recalls(ranks: list[int]) -> dict[str, float]:
+        """Prevedie zoznam poradí na percentuálne hodnoty Recall@K."""
         return {f"R@{k}": sum(1 for rank in ranks if rank <= k) / len(ranks) * 100.0 for k in k_values}
 
     i2t = recalls(i2t_ranks)
@@ -146,7 +139,7 @@ def compute_retrieval_metrics(
 
 
 def compact_metrics(metrics: Dict[str, Any]) -> Dict[str, float]:
-    """Return a flat metrics summary suitable for CSV tables."""
+    """Vytvorí plochý slovník metrík vhodný pre CSV tabuľky."""
     output: dict[str, float] = {}
     for prefix, key in [("i2t", "image_to_text"), ("t2i", "text_to_image"), ("mean", "mean")]:
         for metric, value in metrics.get(key, {}).items():

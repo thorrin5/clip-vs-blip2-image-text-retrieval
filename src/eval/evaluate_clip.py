@@ -1,26 +1,11 @@
 """
-Purpose:
-    Evaluate official OpenAI CLIP ViT-L/14 for image-text retrieval.
+Zero-shot evaluácia oficiálneho OpenAI CLIP ViT-L/14 pre image-text retrieval.
 
-Thesis context:
-    This is the CLIP zero-shot evaluation entrypoint for Flickr30K and SciCap.
-    It can also load AI2D because the shared loader keeps legacy compatibility,
-    but the defense-focused path is Flickr30K plus SciCap.
-
-Inputs:
-    - Experiment YAML config.
-    - Dataset name and split selected by --dataset and --split.
-    - Optional max-images and batch-size arguments for small checks.
-
-Outputs:
-    - Raw JSON metrics with timing fields.
-    - CSV summary row under the configured result tables directory.
-
-Defense note:
-    This script demonstrates the scalable CLIP retrieval workflow: encode all
-    images, encode all captions, multiply normalized embeddings, and compute
-    Recall@K. It is the baseline against which BLIP-2 accuracy and runtime are
-    compared.
+Skript je vstupným bodom pre CLIP experimenty na Flickr30K a SciCap. Načíta
+zvolený dataset, zakóduje všetky obrázky aj texty, vypočíta maticu podobností
+a z nej odvodí Recall@K metriky. Tento postup predstavuje škálovateľný
+dual-encoder baseline, voči ktorému sa porovnáva presnosť a časová náročnosť
+modelu BLIP-2.
 """
 
 from __future__ import annotations
@@ -37,9 +22,10 @@ from src.utils.paths import ensure_output_dirs
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Definuje CLI argumenty pre evaluáciu modelu CLIP."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/experiment_config.yaml")
-    parser.add_argument("--dataset", choices=["flickr30k", "ai2d", "scicap"], default="flickr30k")
+    parser.add_argument("--dataset", choices=["flickr30k", "scicap"], default="flickr30k")
     parser.add_argument("--split", default="test")
     parser.add_argument("--max-images", type=int, default=None)
     parser.add_argument("--batch-size-images", type=int, default=None)
@@ -48,6 +34,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """
+    Spustí CLIP evaluáciu a uloží raw JSON aj CSV zhrnutie.
+
+    Postup zodpovedá dual-encoder retrieval pipeline: najprv sa zakódujú
+    všetky obrázky, potom všetky texty a následne sa vypočíta matica podobnosti.
+    """
     args = build_parser().parse_args(argv)
     config = load_config(args.config)
     ensure_output_dirs(config)
@@ -57,8 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     batch_images = args.batch_size_images or int(eval_config["batch_size_images"])
     batch_texts = args.batch_size_texts or int(eval_config["batch_size_texts"])
 
-    # Model loading is isolated so missing cluster dependencies produce a
-    # documented "blocked" JSON instead of silently failing after a long job.
+    # Načítanie modelu je oddelené, aby chýbajúce závislosti alebo váhy
+    # vytvorili auditovateľný blokovaný JSON namiesto nejasného zlyhania.
     try:
         model = OfficialOpenAIClipWrapper(
             model_config["model_name"],
@@ -98,8 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     timings["images_per_second"] = dataset.num_images / timings["image_encoding_time"] if timings["image_encoding_time"] else 0.0
     timings["texts_per_second"] = dataset.num_captions / timings["text_encoding_time"] if timings["text_encoding_time"] else 0.0
 
-    # All models use the same metric implementation so the CLIP and BLIP-2
-    # comparison differs only in scoring, not in evaluation logic.
+    # Všetky modely používajú rovnaký výpočet Recall@K, takže porovnanie je
+    # ovplyvnené iba skóre modelu, nie odlišnou evaluačnou logikou.
     metrics = compute_retrieval_metrics(similarity, dataset.image_to_captions, get_recall_k(config), timings=timings)
     payload = {
         "status": "ok",
