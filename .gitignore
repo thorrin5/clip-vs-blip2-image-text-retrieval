@@ -22,7 +22,7 @@ data/scicap_processed/
 
 # Model weights, checkpoints, and caches
 checkpoints/
-models/
+/models/
 *.pt
 *.pth
 *.bin

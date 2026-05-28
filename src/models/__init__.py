@@ -1,0 +1,2 @@
+"""Kanonické model wrappery."""
+
