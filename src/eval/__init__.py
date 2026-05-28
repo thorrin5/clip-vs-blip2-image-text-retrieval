@@ -1,2 +1,2 @@
-"""Evaluation entrypoints and shared metrics."""
+"""Vstupné body evaluácie a spoločné metriky."""
 

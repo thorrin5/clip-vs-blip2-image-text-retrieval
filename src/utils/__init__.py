@@ -1,2 +1,2 @@
-"""Utility helpers for canonical experiments."""
+"""Pomocné nástroje pre kanonické experimenty."""
 

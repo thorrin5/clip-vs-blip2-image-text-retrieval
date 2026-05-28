@@ -1,1 +1,1 @@
-"""Canonical fine-tuning entry points."""
+"""Kanonické vstupné body pre fine-tuning."""

@@ -1,4 +1,4 @@
-"""Small logging helper."""
+"""Malá pomocná funkcia pre logovanie."""
 
 from __future__ import annotations
 

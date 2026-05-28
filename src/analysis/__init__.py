@@ -1,2 +1,2 @@
-"""Analysis, tables, and charts for thesis artifacts."""
+"""Analýza, tabuľky a grafy pre artefakty bakalárskej práce."""
 

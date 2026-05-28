@@ -1,2 +1,2 @@
-"""Canonical thesis package for CLIP vs BLIP-2 retrieval experiments."""
+"""Kanonický balík bakalárskej práce pre retrieval experimenty CLIP vs BLIP-2."""
 

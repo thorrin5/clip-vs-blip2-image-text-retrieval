@@ -47,7 +47,7 @@ TARGET: dict[str, tuple[int, int]] = {
     "scicap_blip2":     (1, 2),   # ~30% R@1
 }
 
-# ── Layout ──────────────────────────────────────────────────────────────────
+# ── Rozloženie (layout) ───────────────────────────────────────────────────────
 IMG_W, IMG_H   = 420, 315
 PANEL_PAD      = 22
 TEXT_AREA_H    = 170
@@ -66,7 +66,7 @@ PRED_COLOR     = (0,    0,  160)
 BORDER_W       = 4
 
 
-# ── Font helpers ────────────────────────────────────────────────────────────
+# ── Pomocné funkcie pre fonty ─────────────────────────────────────────────────
 def _font(size: int) -> ImageFont.ImageFont:
     """Načíta dostupný bežný font pre kreslenie textu do koláže."""
     for path in [
@@ -94,7 +94,7 @@ def _bold(size: int) -> ImageFont.ImageFont:
     return _font(size)
 
 
-# ── Similarity computation ───────────────────────────────────────────────────
+# ── Výpočet podobnosti ────────────────────────────────────────────────────────
 def compute_similarity(wrapper, dataset, batch_size: int = 16) -> torch.Tensor:
     """
     Vypočíta maticu skóre použitú pri výbere príkladov do koláže.
@@ -113,7 +113,7 @@ def compute_similarity(wrapper, dataset, batch_size: int = 16) -> torch.Tensor:
     return sim.cpu()
 
 
-# ── Example selection ────────────────────────────────────────────────────────
+# ── Výber príkladov ───────────────────────────────────────────────────────────
 def _spread(pool: list, n: int) -> list:
     """Vyberie n položiek rovnomerne z kandidátskeho zoznamu pre vizuálnu pestrosť."""
     if n == 0:
@@ -222,7 +222,7 @@ def select_examples(
     return result[: n_hits + n_miss]
 
 
-# ── Collage drawing ──────────────────────────────────────────────────────────
+# ── Kreslenie koláže ──────────────────────────────────────────────────────────
 def draw_collage(examples: list[dict], dataset, title: str, out_path: Path) -> None:
     """
     Vykreslí vybrané retrieval príklady do jedného PNG súboru.
@@ -279,7 +279,7 @@ def draw_collage(examples: list[dict], dataset, title: str, out_path: Path) -> N
     print(f"  Saved → {out_path.name}")
 
 
-# ── Per-dataset runners ──────────────────────────────────────────────────────
+# ── Spúšťače pre jednotlivé datasety ──────────────────────────────────────────
 def flickr30k_collages(config: dict) -> None:
     """Vygeneruje zero-shot kvalitatívne koláže pre Flickr30K."""
     dataset = load_flickr30k_karpathy(
@@ -355,7 +355,7 @@ def _load_checkpoint(wrapper, label: str, ckpt: Path) -> None:
         wrapper.model.load_state_dict(data["trainable_state_dict"], strict=False)
 
 
-# ── Entry point ──────────────────────────────────────────────────────────────
+# ── Vstupný bod ───────────────────────────────────────────────────────────────
 def main() -> None:
     """Načíta konfiguráciu a vytvorí všetky podporované koláže."""
     config = load_config(str(CONFIG))
