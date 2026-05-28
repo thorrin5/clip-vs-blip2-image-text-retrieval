@@ -1,6 +1,6 @@
 # Results Summary
 
-The final CSV summaries are stored in [`../results`](../results). The main comparison is [`../results/full_comparison.csv`](../results/full_comparison.csv).
+The final CSV summaries are stored in [`../results`](../results). The main comparison is [`../results/full_comparison.csv`](../results/full_comparison.csv). CSV timing values are rounded summaries; raw JSON payloads retain full floating-point timing.
 
 | Dataset | Model | Setting | Mean R@1 | Mean R@5 | Mean R@10 | Runtime (s) |
 |---|---:|---:|---:|---:|---:|---:|

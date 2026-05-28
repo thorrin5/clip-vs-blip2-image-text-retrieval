@@ -38,7 +38,7 @@ The retrieval task is evaluated in both directions:
 
 ## Main Results
 
-Values below are copied from [`results/full_comparison.csv`](results/full_comparison.csv). Runtime is total measured evaluation time in seconds.
+Values below are copied from [`results/full_comparison.csv`](results/full_comparison.csv). Runtime is total measured evaluation time in seconds, rounded in CSV summaries for readability; raw JSON payloads retain full precision.
 
 | Dataset | Model | Setting | Mean R@1 | Mean R@5 | Mean R@10 | Runtime (s) |
 |---|---:|---:|---:|---:|---:|---:|
